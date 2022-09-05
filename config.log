@@ -1,0 +1,22 @@
+This file contains any messages produced by compilers while
+running configure, to aid debugging if configure makes a mistake.
+
+configure:534: checking for gcc
+configure:647: checking whether the C compiler (gcc  ) works
+configure:663: gcc -o conftest    conftest.c  1>&5
+configure:689: checking whether the C compiler (gcc  ) is a cross-compiler
+configure:694: checking whether we are using GNU C
+configure:722: checking whether gcc accepts -g
+configure:758: checking for malloc in -lc
+configure:806: checking how to run the C preprocessor
+configure:889: checking for getopt.h
+configure:889: checking for stdio.h
+configure:889: checking for stdlib.h
+configure:889: checking for memory.h
+configure:889: checking for string.h
+configure:989: checking host system type
+configure:1010: checking target system type
+configure:1028: checking build system type
+configure:1093: checking for getopt_long
+configure:1093: checking for memset
+configure:1093: checking for memmove

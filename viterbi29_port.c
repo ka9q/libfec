@@ -1,23 +1,20 @@
-/* K=7 r=1/2 Viterbi decoder in portable C
+/* K=9 r=1/2 Viterbi decoder in portable C
  * Copyright Feb 2004, Phil Karn, KA9Q
  * May be used under the terms of the GNU Lesser General Public License (LGPL)
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
-#include <limits.h>
 #include "fec.h"
 
+typedef union { unsigned int w[256]; } metric_t;
+typedef union { unsigned long w[8];} decision_t;
 
-typedef union { unsigned int w[64]; } metric_t;
-typedef union { unsigned long w[2];} decision_t;
-static union branchtab27 { unsigned char c[32]; } Branchtab27[2] __attribute__ ((aligned(16)));
+static union { unsigned char c[128]; } Branchtab29[2];
 static int Init = 0;
 
-/* State info for instance of Viterbi decoder
- * Don't change this without also changing references in [mmx|sse|sse2]bfly29.s!
- */
-struct v27 {
+/* State info for instance of Viterbi decoder */
+struct v29 {
   metric_t metrics1; /* path metric buffer 1 */
   metric_t metrics2; /* path metric buffer 2 */
   decision_t *dp;          /* Pointer to current decision */
@@ -26,72 +23,73 @@ struct v27 {
 };
 
 /* Initialize Viterbi decoder for start of new frame */
-int init_viterbi27_port(void *p,int starting_state){
-  struct v27 *vp = p;
+int init_viterbi29_port(void *p,int starting_state){
+  struct v29 *vp = p;
   int i;
 
-  for(i=0;i<64;i++)
+  for(i=0;i<256;i++)
     vp->metrics1.w[i] = 63;
 
   vp->old_metrics = &vp->metrics1;
   vp->new_metrics = &vp->metrics2;
   vp->dp = vp->decisions;
-  vp->old_metrics->w[starting_state & 63] = 0; /* Bias known start state */
+  vp->old_metrics->w[starting_state & 255] = 0; /* Bias known start state */
   return 0;
 }
 
 /* Create a new instance of a Viterbi decoder */
-void *create_viterbi27_port(int len){
-  struct v27 *vp;
+void *create_viterbi29_port(int len){
+  struct v29 *vp;
   int state;
 
   if(!Init){
     /* Initialize branch tables */
-    for(state=0;state < 32;state++){
-      Branchtab27[0].c[state] = parity((2*state) & V27POLYA) ? 255:0;
-      Branchtab27[1].c[state] = parity((2*state) & V27POLYB) ? 255:0;
+    for(state=0;state < 128;state++){
+      Branchtab29[0].c[state] = parity((2*state) & V29POLYA) ? 255:0;
+      Branchtab29[1].c[state] = parity((2*state) & V29POLYB) ? 255:0;
     }
     Init++;
   }
-  vp = malloc(sizeof(struct v27));
-  vp->decisions = malloc((len+6)*sizeof(decision_t));
-  init_viterbi27_port(vp,0);
+  vp = (struct v29 *)malloc(sizeof(struct v29));
+  vp->decisions = (decision_t *)malloc((len+8)*sizeof(decision_t));
+  init_viterbi29_port(vp,0);
 
   return vp;
 }
 
+
 /* Viterbi chainback */
-int chainback_viterbi27_port(
+int chainback_viterbi29_port(
       void *p,
       unsigned char *data, /* Decoded output data */
       unsigned int nbits, /* Number of data bits */
       unsigned int endstate){ /* Terminal encoder state */
-  struct v27 *vp = p;
+  struct v29 *vp = p;
   decision_t *d = vp->decisions;
 
   /* Make room beyond the end of the encoder register so we can
    * accumulate a full byte of decoded data
    */
-  endstate %= 64;
-  endstate <<= 2;
+  endstate %= 256;
 
   /* The store into data[] only needs to be done every 8 bits.
    * But this avoids a conditional branch, and the writes will
    * combine in the cache anyway
    */
-  d += 6; /* Look past tail */
+  d += 8; /* Look past tail */
   while(nbits-- != 0){
     int k;
-
-    k = (d[nbits].w[(endstate>>2)/32] >> ((endstate>>2)%32)) & 1;
+    
+    k = (d[nbits].w[(endstate)/32] >> (endstate%32)) & 1;
     data[nbits>>3] = endstate = (endstate >> 1) | (k << 7);
   }
   return 0;
 }
 
+
 /* Delete instance of a Viterbi decoder */
-void delete_viterbi27_port(void *p){
-  struct v27 *vp = p;
+void delete_viterbi29_port(void *p){
+  struct v29 *vp = p;
 
   if(vp != NULL){
     free(vp->decisions);
@@ -102,9 +100,9 @@ void delete_viterbi27_port(void *p){
 /* C-language butterfly */
 #define BFLY(i) {\
 unsigned int metric,m0,m1,decision;\
-    metric = (Branchtab27[0].c[i] ^ sym0) + (Branchtab27[1].c[i] ^ sym1);\
+    metric = (Branchtab29[0].c[i] ^ sym0) + (Branchtab29[1].c[i] ^ sym1);\
     m0 = vp->old_metrics->w[i] + metric;\
-    m1 = vp->old_metrics->w[i+32] + (510 - metric);\
+    m1 = vp->old_metrics->w[i+128] + (510 - metric);\
     decision = (signed int)(m0-m1) > 0;\
     vp->new_metrics->w[2*i] = decision ? m1 : m0;\
     d->w[i/16] |= decision << ((2*i)&31);\
@@ -119,56 +117,28 @@ unsigned int metric,m0,m1,decision;\
  * Note that nbits is the number of decoded data bits, not the number
  * of symbols!
  */
-int update_viterbi27_blk_port(void *p,unsigned char *syms,int nbits){
-  struct v27 *vp = p;
+
+int update_viterbi29_blk_port(void *p,unsigned char *syms,int nbits){
+  struct v29 *vp = p;
   void *tmp;
   decision_t *d = (decision_t *)vp->dp;
-
   while(nbits--){
     unsigned char sym0,sym1;
+    int i;
 
-    d->w[0] = d->w[1] = 0;
+    for(i=0;i<8;i++)
+      d->w[i] = 0;
     sym0 = *syms++;
     sym1 = *syms++;
     
-    BFLY(0);
-    BFLY(1);
-    BFLY(2);
-    BFLY(3);
-    BFLY(4);
-    BFLY(5);
-    BFLY(6);
-    BFLY(7);
-    BFLY(8);
-    BFLY(9);
-    BFLY(10);
-    BFLY(11);
-    BFLY(12);
-    BFLY(13);
-    BFLY(14);
-    BFLY(15);
-    BFLY(16);
-    BFLY(17);
-    BFLY(18);
-    BFLY(19);
-    BFLY(20);
-    BFLY(21);
-    BFLY(22);
-    BFLY(23);
-    BFLY(24);
-    BFLY(25);
-    BFLY(26);
-    BFLY(27);
-    BFLY(28);
-    BFLY(29);
-    BFLY(30);
-    BFLY(31);
+    for(i=0;i<128;i++)
+      BFLY(i);
+
     d++;
-    /* Swap pointers to old and new metrics */
     tmp = vp->old_metrics;
     vp->old_metrics = vp->new_metrics;
     vp->new_metrics = tmp;
-  }    
+  }  
   vp->dp = d;
   return 0;
 }

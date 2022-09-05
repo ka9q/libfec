@@ -2,12 +2,13 @@
 # Copyright 2004 Phil Karn, KA9Q
 # May be used under the terms of the GNU Lesser General Public License (LGPL)
 
-# Generated automatically from makefile.in by configure.
-srcdir = .
-prefix = /usr/local
-exec_prefix=${prefix}
-CC=gcc
-LIBS=viterbi27_mmx.o mmxbfly27.o viterbi27_sse.o ssebfly27.o viterbi27_sse2.o sse2bfly27.o 	viterbi29_mmx.o mmxbfly29.o viterbi29_sse.o ssebfly29.o viterbi29_sse2.o sse2bfly29.o 	viterbi615_mmx.o viterbi615_sse.o viterbi615_sse2.o 	dotprod_mmx.o dotprod_mmx_assist.o 	dotprod_sse2.o dotprod_sse2_assist.o 	peakval_mmx.o peakval_mmx_assist.o 	peakval_sse.o peakval_sse_assist.o 	peakval_sse2.o peakval_sse2_assist.o 	sumsq.o sumsq_port.o 	sumsq_sse2.o sumsq_sse2_assist.o 	sumsq_mmx.o sumsq_mmx_assist.o 	cpu_features.o cpu_mode_x86.o fec.o sim.o viterbi27.o viterbi27_port.o viterbi29.o viterbi29_port.o \
+# @configure_input@
+srcdir = @srcdir@
+prefix = @prefix@
+exec_prefix=@exec_prefix@
+VPATH = @srcdir@
+CC=@CC@
+LIBS=@MLIBS@ fec.o sim.o viterbi27.o viterbi27_port.o viterbi29.o viterbi29_port.o \
 	viterbi615.o viterbi615_port.o encode_rs_char.o encode_rs_int.o encode_rs_8.o \
 	decode_rs_char.o decode_rs_int.o decode_rs_8.o \
 	init_rs_char.o init_rs_int.o ccsds_tab.o \
@@ -16,9 +17,9 @@ LIBS=viterbi27_mmx.o mmxbfly27.o viterbi27_sse.o ssebfly27.o viterbi27_sse2.o ss
 	peakval.o peakval_port.o \
 	sumsq.o sumsq_port.o
 
-CFLAGS=-g -O2 -I. -Wall -march=i686
+CFLAGS=@CFLAGS@ -I. -Wall @ARCH_OPTION@
 
-SHARED_LIB=libfec.so
+SHARED_LIB=@SH_LIB@
 
 all: libfec.a $(SHARED_LIB)
 
@@ -35,14 +36,14 @@ test: vtest27 vtest29 vtest615 rstest dtest sumsq_test peaktest
 	./peaktest
 
 install: all
-	mkdir -p ${exec_prefix}/lib 
-	install -m 644 -p $(SHARED_LIB) libfec.a ${exec_prefix}/lib
-#	(cd ${exec_prefix}/lib;ln -f -s $(SHARED_LIB) libfec.so)
-	ldconfig
-	mkdir -p ${prefix}/include
-	install -m 644 -p fec.h ${prefix}/include
-	mkdir -m 0755 -p ${prefix}/man/man3
-	install -m 644 -p simd-viterbi.3 rs.3 dsp.3 ${prefix}/man/man3
+	mkdir -p @libdir@ 
+	install -m 644 -p $(SHARED_LIB) libfec.a @libdir@
+#	(cd @libdir@;ln -f -s $(SHARED_LIB) libfec.so)
+	@REBIND@
+	mkdir -p @includedir@
+	install -m 644 -p fec.h @includedir@
+	mkdir -m 0755 -p @mandir@/man3
+	install -m 644 -p simd-viterbi.3 rs.3 dsp.3 @mandir@/man3
 
 peaktest: peaktest.o libfec.a
 	gcc -g -o $@ $^

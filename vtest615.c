@@ -28,26 +28,29 @@ struct option Options[] = {
 };
 #endif
 
-#define RATE (1./2.)
+#define RATE (1./6.)
 #define MAXBYTES 10000
+#define OFFSET (127.5)
+#define CLIP 255
 
-double Gain = 32.0;
+double Gain = 24.0;
 int Verbose = 0;
 
 int main(int argc,char *argv[]){
   int i,d,tr;
-  int sr=0,trials = 10000,errcnt,framebits=2048;
-  long long int tot_errs=0;
+  int sr=0,trials = 10,errcnt,framebits=2048;
+  int tot_errs=0;
   unsigned char bits[MAXBYTES];
   unsigned char data[MAXBYTES];
   unsigned char xordata[MAXBYTES];
-  unsigned char symbols[8*2*(MAXBYTES+6)];
+  unsigned char symbols[8*6*(MAXBYTES+14)];
   void *vp;
   extern char *optarg;
   struct tms start,finish;
   double extime;
   double gain,esn0,ebn0;
   time_t t;
+  long long metrics = 0;
   int badframes=0;
 
   time(&t);
@@ -95,8 +98,8 @@ int main(int argc,char *argv[]){
     fprintf(stderr,"Frame limited to %d bits\n",MAXBYTES*8);
     framebits = MAXBYTES*8;
   }
-  if((vp = create_viterbi27(framebits)) == NULL){
-    printf("create_viterbi27 failed\n");
+  if((vp = create_viterbi615(framebits)) == NULL){
+    printf("create_viterbi615 failed\n");
     exit(1);
   }
   if(ebn0 != -100){
@@ -111,23 +114,27 @@ int main(int argc,char *argv[]){
     
     for(tr=0;tr<trials;tr++){
       /* Encode a frame of random data */
-      for(i=0;i<framebits+6;i++){
+      for(i=0;i<framebits+14;i++){
 	int bit = (i < framebits) ? (random() & 1) : 0;
 	
 	sr = (sr << 1) | bit;
 	bits[i/8] = sr & 0xff;
-	symbols[2*i+0] = addnoise(parity(sr & V27POLYA),gain,Gain,127.5,255);
-	symbols[2*i+1] = addnoise(parity(sr & V27POLYB),gain,Gain,127.5,255);
+	symbols[6*i+0] = addnoise(parity(sr & V615POLYA),gain,Gain,OFFSET,CLIP);
+	symbols[6*i+1] = addnoise(parity(sr & V615POLYB),gain,Gain,OFFSET,CLIP);
+	symbols[6*i+2] = addnoise(parity(sr & V615POLYC),gain,Gain,OFFSET,CLIP);
+	symbols[6*i+3] = addnoise(parity(sr & V615POLYD),gain,Gain,OFFSET,CLIP);
+	symbols[6*i+4] = addnoise(parity(sr & V615POLYE),gain,Gain,OFFSET,CLIP);
+	symbols[6*i+5] = addnoise(parity(sr & V615POLYF),gain,Gain,OFFSET,CLIP);
       }
       /* Decode it and make sure we get the right answer */
       /* Initialize Viterbi decoder */
-      init_viterbi27(vp,0);
+      init_viterbi615(vp,0);
       
       /* Decode block */
-      update_viterbi27_blk(vp,symbols,framebits+6);
+      metrics += update_viterbi615_blk(vp,symbols,framebits+14);
       
       /* Do Viterbi chainback */
-      chainback_viterbi27(vp,data,framebits,0);
+      metrics += chainback_viterbi615(vp,data,framebits,0);
       errcnt = 0;
       for(i=0;i<framebits/8;i++){
 	int e = Bitcnt[xordata[i] = data[i] ^ bits[i]];
@@ -144,20 +151,23 @@ int main(int argc,char *argv[]){
 	printf("\n");
       }
       if(Verbose)
-	printf("BER %lld/%lld (%10.3g) FER %d/%d (%10.3g)\r",
-	       tot_errs,(long long)framebits*(tr+1),tot_errs/((double)framebits*(tr+1)),
-	       badframes,tr+1,(double)badframes/(tr+1));
+	printf("BER %d/%d (%10.3g) FER %d/%d (%10.3g) avg path metric %.2f\r",
+	       tot_errs,framebits*(tr+1),tot_errs/((double)framebits*(tr+1)),
+	       badframes,(tr+1),(double)badframes/(tr+1),
+	       (double)metrics/(tr+1));
       fflush(stdout);
+
     }
+
     if(Verbose > 1)
       printf("nframes = %d framesize = %d ebn0 = %.2f dB gain = %g\n",trials,framebits,ebn0,Gain);
     else if(Verbose == 0)
-      printf("BER %lld/%lld (%.3g) FER %d/%d (%.3g)\n",
-	     tot_errs,(long long)framebits*trials,tot_errs/((double)framebits*trials),
-	     badframes,tr+1,(double)badframes/(tr+1));
+	printf("BER %d/%d (%.3g) FER %d/%d (%.3g) avg path metric %.2f\n",
+	       tot_errs,framebits*(tr+1),tot_errs/((double)framebits*(tr+1)),
+	       badframes,(tr+1),(double)badframes/(tr+1),
+	       (double)metrics/(tr+1));
     else
       printf("\n");
-
   } else {
     /* Do time trials */
     memset(symbols,127,sizeof(symbols));
@@ -165,13 +175,13 @@ int main(int argc,char *argv[]){
     times(&start);
     for(tr=0;tr < trials;tr++){
       /* Initialize Viterbi decoder */
-      init_viterbi27(vp,0);
-      
+      init_viterbi615(vp,0);
+
       /* Decode block */
-      update_viterbi27_blk(vp,symbols,framebits);
-      
+      update_viterbi615_blk(vp,symbols,framebits+14);
+
       /* Do Viterbi chainback */
-      chainback_viterbi27(vp,data,framebits,0);
+      chainback_viterbi615(vp,data,framebits,0);
     }
     times(&finish);
     extime = ((double)(finish.tms_utime-start.tms_utime))/CLOCKS_PER_SEC;

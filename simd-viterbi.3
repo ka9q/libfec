@@ -1,0 +1,176 @@
+.TH SIMD-VITERBI 3
+.SH NAME
+create_viterbi27, init_viterbi27, update_viterbi27_blk,
+chainback_viterbi27,
+delete_viterbi27, create_viterbi29, init_viterbi29,
+update_viterbi29_blk,
+chainback_viterbi29, delete_viterbi29 -\ IA32 SIMD-assisted Viterbi decoders
+.SH SYNOPSIS
+.nf
+.ft B
+#include "fec.h"
+void *create_viterbi27(int blocklen);
+int init_viterbi27(void *vp,int starting_state);
+void update_viterbi27_blk(void *vp,unsigned char syms[],int nbits);
+int chainback_viterbi27(void *vp, unsigned char *data,unsigned int nbits,unsigned int endstate);
+void delete_viterbi27(void *vp);
+.fi
+.sp
+.nf
+.ft B
+void *create_viterbi29(int blocklen);
+int init_viterbi29(void *vp,int starting_state);
+void update_viterbi29_blk(void *vp,unsigned char syms[],int nbits);
+int chainback_viterbi29(void *vp, unsigned char *data,unsigned int nbits,unsigned int endstate);
+void delete_viterbi29(void *vp);
+.fi
+.sp
+.nf
+.ft B
+void *create_viterbi615(int blocklen);
+int init_viterbi615(void *vp,int starting_state);
+void update_viterbi615_blk(void *vp,unsigned char syms[],int nbits);
+int chainback_viterbi615(void *vp, unsigned char *data,unsigned int nbits,unsigned int endstate);
+void delete_viterbi615(void *vp);
+.fi
+.SH DESCRIPTION
+These functions implement high performance Viterbi decoders for three
+convolutional codes: a rate 1/2 constraint length 7 (k=7) code
+("viterbi27"), a rate 1/2 k=9 code ("viterbi29") and a rate 1/6 k=15 code ("viterbi615").
+The decoders use the Intel IA32 or PowerPC SIMD instruction sets, if available, to improve
+decoding speed.
+
+On the IA32 there are three different SIMD instruction sets. The first
+and most common is MMX, introduced on later Intel Pentiums and then on
+the Intel Pentium II and most Intel clones (AMD K6, Transmeta Crusoe,
+etc).  SSE was introduced on the Pentium III and later implemented in
+the AMD Athlon 4 (AMD calls it "3D Now!  Professional"). Most
+recently, SSE2 was introduced in the Intel Pentium 4, and has been
+adopted by more recent AMD CPUs. The presence of SSE2 implies the
+existence of SSE, which in turn implies MMX.
+
+Altivec is the PowerPC SIMD instruction set. It is roughly comparable
+to SSE2. Altivec was introduced to the general public in the Apple
+Macintosh G4; it is also present in the G5. Altivec is actually a
+Motorola trademark; Apple calls it "Velocity Engine" and IBM calls it
+"VMX". All refer to the same thing.
+
+When built for the IA32 or PPC architectures, the functions
+automatically use the most powerful SIMD instruction set available. If
+no SIMD instructions are available, or if the library is built for
+non-IA32 and non-PPC machines, a portable C version is executed
+instead.
+
+.SH USAGE
+Three versions of each function are provided, one for each code.
+In the following discussion the k=7 code
+will be assumed. To use the k=9 or k=15 code, simply change all references to
+"viterbi27" to "viterbi29" or "viterbi615" as appropriate.
+
+Before Viterbi decoding can begin, an instance must first be created with
+\fBcreate_viterbi27()\fR.  This function creates and returns a pointer to
+an internal control structure
+containing the path metrics and the branch
+decisions. \fBcreate_viterbi27()\fR takes one argument that gives the
+length of the data block in bits. You \fImust not\fR attempt to
+decode a block longer than the length given to \fBcreate_viterbi27()\fR.
+
+Before decoding a new frame,
+\fBinit_viterbi27()\fR must be called to reset the decoder state.
+It accepts the instance pointer returned by
+\fBcreate_viterbi27()\fR and the initial starting state of the
+convolutional encoder (usually 0). If the initial starting state is unknown or
+incorrect, the decoder will still function but the decoded data may be
+incorrect at the start of the block.
+
+Blocks of received symbols are processed with calls to
+\fBupdate_viterbi27_blk()\fR.  The \fBnbits\fR parameter specifies the
+number of \fIdata bits\fR (not channel symbols) represented by the
+\fBsyms\fR buffer. (For rate 1/2 codes, the number of symbols in
+\fBsyms\fR is twice \fInbits\fR; for rate 1/6 codes, \fBsyms\fR is six times
+\fInbits\fR.)  Each symbol is expected to range
+from 0 through 255, with 0 corresponding to a "strong 0" and 255
+corresponding to a "strong 1". The caller is responsible for
+determining the proper pairing of input symbols (commonly known as
+decoder symbol phasing).
+
+At the end of the block, the data is recovered with a call to
+\fBchainback_viterbi27()\fR. The arguments are the pointer to the
+decoder instance, a pointer to a user-supplied buffer into which the
+decoded data is to be written, the number of data bits (not bytes)
+that are to be decoded, and the terminal state of the convolutional
+encoder at the end of the frame (usually 0). If the terminal state is
+incorrect or unknown, the decoded data bits at the end of the frame
+may be unreliable. The decoded data is written in big-endian order,
+i.e., the first bit in the frame is written into the high order bit of
+the first byte in the buffer. If the frame is not an integral number
+of bytes long, the low order bits of the last byte in the frame will
+be unused.
+
+Note that the decoders assume the use of a tail, i.e., the encoding
+and transmission of a sufficient number of padding bits beyond the end
+of the user data to force the convolutional encoder into the known
+terminal state given to \fBchainback_viterbi27()\fR. The tail is
+always one bit less than the constraint length of the code, so the k=7
+code uses 6 tail bits (12 tail symbols), the k=9 code uses 8 tail bits
+(16 tail symbols) and the k=15 code uses 14 tail bits (84 tail
+symbols).
+
+The tail bits are not included in the length arguments to
+\fBcreate_viterbi27()\fR and \fBchainback_viterbi27()\fR. For example, if
+the block contains 1000 user bits, then this would be the length
+parameter given to \fBcreate_viterbi27()\fR and
+\fBchainback_viterbi27()\fR, and \fBupdate_viterbi27()\fR would be called
+a total of 1006 times - the last 6 with the 12 encoded symbols
+representing the tail bits.
+
+After the call to \fBchainback_viterbi27()\fR, the decoder may be reset
+with a call to \fBinit_viterbi27()\fR and another block can be decoded.
+Alternatively, \fBdelete_viterbi27()\fR can be called to free all resources
+used by the Viterbi decoder.
+
+.SH ERROR PERFORMANCE
+These decoders have all been extensively tested and found to provide
+performance consistent with that expected for soft-decision Viterbi
+decoding with 8-bit symbols.
+
+Due to internal differences, the various implementations of the k=7
+and k=9 Viterbi decoders vary slightly in error performance. In
+general, the portable C versions exhibit the best error performance
+because they use full-sized branch metrics, and the MMX versions
+exhibit the worst because they use 8-bit branch metrics with modulo
+comparisons. The SSE, SSE2 and Altivec implementations use unsigned
+8-bit branch metrics, and are almost as good as the C versions.  The
+k=15 code is implemented with 16-bit path metrics in all SIMD
+versions.
+
+.SH DIRECT ACCESS TO SPECIFIC FUNCTION VERSIONS
+Calling the functions listed above automatically calls the appropriate
+version of the function depending on the CPU type and available SIMD
+instructions. A particular version can also be called directly by
+appending the appropriate suffix to the function name. The available
+suffixes are "_mmx", "_sse", "_sse2", "_av" and "_port", for the MMX,
+SSE, SSE2, Altivec and portable versions, respectively. For example,
+the SSE2 version of the update_viterbi27_blk() function can be invoked
+as update_viterbi27_blk_sse2().
+
+Naturally, the _av functions are only available on the PowerPC, the
+_mmx, _sse and _sse2 versions are only available on IA-32, and calling
+a SIMD-enabled function on a CPU that doesn't support the appropriate
+set of instructions will result in an illegal instruction exception.
+
+.SH RETURN VALUES
+\fBcreate_viterbi27()\fR returns a pointer to the structure containing
+the decoder state. Depending on the specific version,
+\fBupdate_viterbi27()\fR returns either zero or the amount by which
+the decoder path metrics were normalized in the current step. This is
+an experimental feature that is not supported in all decoders and may
+be removed in future versions
+
+.SH AUTHOR & COPYRIGHT
+Phil Karn, KA9Q (karn@ka9q.net)
+
+.SH LICENSE
+This software may be used under the terms of the GNU Limited General Public License (LGPL).
+
+
