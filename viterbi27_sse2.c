@@ -97,7 +97,7 @@ int chainback_viterbi27(
       unsigned int endstate){ // Terminal encoder state
   struct v27 *vp = p;
   decision_t *d;
-  unsigned char dbyte = 0;
+  //  unsigned char dbyte = 0;
 
   if(p == NULL)
     return -1;
